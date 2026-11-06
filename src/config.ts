@@ -22,6 +22,7 @@ export interface Config {
   botUserId: number | null;   // the API key's user; learned automatically if unset
   allowedUserIds: Set<number> | null; // pilot allowlist; null = everyone
   healthPort: number;         // 0 disables
+  healthHost: string;         // 127.0.0.1 locally; 0.0.0.0 inside a container
   retentionDays: number;
 }
 
@@ -70,6 +71,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     botUserId: optInt('BOT_USER_ID'),
     allowedUserIds: allowed.length ? new Set(allowed) : null,
     healthPort: int('BOT_HEALTH_PORT', 8080, 0),
+    healthHost: env.BOT_HEALTH_HOST?.trim() || '127.0.0.1',
     retentionDays: int('BOT_RETENTION_DAYS', 90, 1),
   };
 }

@@ -1,0 +1,78 @@
+# PureService bot. Start (or update after a git pull) with:
+#
+#   docker compose up -d --build
+#
+# Every setting is in `environment:` below. The one exception is the API key:
+# it's read from your shell or from a file named `.env` next to this one
+# (one line: PS_API_KEY=...). That file is git-ignored, so the key never ends up
+# in the repository. Docker Compose reads it automatically.
+
+name: pureservice-tools
+
+services:
+  bot:
+    build: .
+    image: pureservice-tools:local
+    container_name: pureservice-bot
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+
+    environment:
+      # --- PureService
+      PS_BASE_URL: https://smith.pureservice.com
+      PS_API_KEY: ${PS_API_KEY:?PS_API_KEY is not set. Create a .env file next to docker-compose.yml containing PS_API_KEY=your-key}
+
+      # --- safety switches
+      # "false" = DRY-RUN: reads and logs everything, posts nothing. Set "true" to go live.
+      BOT_WRITE_ENABLED: "false"
+      # Pilot allowlist: comma-separated PureService user ids. Empty = everyone.
+      BOT_ALLOWED_USER_IDS: "2611"
+      # The API key's own user id. Empty = learned from the bot's first post.
+      BOT_USER_ID: ""
+
+      # --- behaviour
+      BOT_TIMEZONE: Europe/Oslo
+      BOT_DEFAULT_TIME: "08:00"          # used for "!remindme fredag" (date without a time)
+      BOT_LOG_LEVEL: info
+      BOT_START_FROM_ID: ""              # first start only; empty = start at the newest note
+
+      # --- budgets (PureService allows 100 requests/min)
+      BOT_REQUESTS_PER_MINUTE: "40"
+      BOT_NOTES_PER_MINUTE: "20"
+      BOT_NOTES_PER_TICKET_PER_HOUR: "5"
+      BOT_COMMANDS_PER_USER_PER_HOUR: "20"
+      BOT_MAX_COMMANDS_PER_NOTE: "3"
+      BOT_OUTBOX_BACKLOG_LIMIT: "200"
+      BOT_POLL_INTERVAL_SEC: "30"
+      BOT_RETENTION_DAYS: "90"
+
+      # --- container plumbing (normally leave as is)
+      BOT_DB_PATH: /app/data/bot.db
+      BOT_HEALTH_HOST: 0.0.0.0
+      BOT_HEALTH_PORT: "8080"
+
+    volumes:
+      - bot-data:/app/data             # reminders survive restarts and rebuilds
+
+    ports:
+      - "127.0.0.1:8080:8080"          # health endpoint, reachable only from this machine
+
+    # Hardening: the bot only needs to write to its data volume.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+volumes:
+  bot-data:

@@ -89,7 +89,7 @@ const server = config.healthPort
         apiRequests: client.requestCount,
       };
       res.writeHead(healthy ? 200 : 503, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
-    }).listen(config.healthPort, '127.0.0.1', () => log.info('health endpoint listening', { url: `http://127.0.0.1:${config.healthPort}/healthz` }))
+    }).listen(config.healthPort, config.healthHost, () => log.info('health endpoint listening', { url: `http://${config.healthHost}:${config.healthPort}/healthz` }))
   : null;
 
 // ---------------------------------------------------------------- shutdown

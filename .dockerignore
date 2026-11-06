@@ -1,0 +1,15 @@
+# Keep the build context small, and keep secrets (spike/.env, .env) out of the image.
+.git
+node_modules
+data
+spike
+docs
+*.md
+.env
+.env.*
+**/*.test.ts
+Dockerfile
+docker-compose.yml
+.dockerignore
+.gitignore
+.gitattributes

@@ -18,7 +18,35 @@ at a later time.
 Units: `m`/`min` minutes · `h`/`t`/`timer` hours · `d`/`dager` days · `w`/`u`/`uker`
 weeks · `mo`/`mnd`/`month` months · `y`/`år` years. `m` always means **minutes**.
 
-## Run it
+## Run it with Docker (recommended)
+
+Requires Docker with the Compose plugin. Every setting is in
+[docker-compose.yml](docker-compose.yml) except the API key, which comes from a
+git-ignored `.env` file next to it.
+
+```bash
+git clone <repo-url> pureservice-tools && cd pureservice-tools
+echo PS_API_KEY=your-key > .env
+docker compose up -d --build
+```
+
+The same `docker compose up -d --build` command also applies updates after a
+`git pull`. Useful commands:
+
+```bash
+docker compose logs -f             # follow the JSON logs
+curl http://127.0.0.1:8080/healthz # status: last poll, cursor, pending reminders
+docker compose down                # stop (reminders are kept in the bot-data volume)
+```
+
+The bot starts in **dry-run**, with only user 2611 allowed. To go live, set
+`BOT_WRITE_ENABLED: "true"` in the compose file (and widen or clear
+`BOT_ALLOWED_USER_IDS`), then run `docker compose up -d` again.
+
+Reminders live in the named volume `bot-data`. `docker compose down -v` **deletes
+them**.
+
+## Run it with Node
 
 Requires Node 24+. No build step: Node runs the TypeScript directly.
 
