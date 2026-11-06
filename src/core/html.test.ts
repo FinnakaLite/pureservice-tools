@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { commandLines, htmlToLines, mentionHtml } from './html.ts';
+import { commandLines, escapeHtml, htmlToLines, mentionedUserIds, mentionHtml } from './html.ts';
 
 // Real markup captured from smith.pureservice.com during the spike.
 const MENTION = '<a class="x-ps-autocomplete-mention" href="mailto:finn.mccann@smith.no" data-mention="true" data-mention-user-id="2611" data-mention-firstname="Finn" data-mention-lastname="McCann">@Finn McCann</a>';
@@ -25,4 +25,12 @@ describe('mentionHtml', () => {
   it('reproduces the editor markup exactly', () =>
     assert.equal(mentionHtml({ id: 2611, firstName: 'Finn', lastName: 'McCann', email: 'finn.mccann@smith.no' }), MENTION));
   it('escapes names', () => assert.match(mentionHtml({ id: 1, firstName: '<b>', lastName: 'x"y', email: null }), /&lt;b&gt;.*x&quot;y/));
+});
+
+describe('mentionedUserIds', () => {
+  it('finds mention anchors, deduplicated', () =>
+    assert.deepEqual(mentionedUserIds(`<p>${MENTION} og ${mentionHtml({ id: 740, firstName: 'K', lastName: 'S', email: null })} ${MENTION}</p>`), [2611, 740]));
+  it('ignores escaped user text that looks like a mention', () =>
+    assert.deepEqual(mentionedUserIds(`<p>«${escapeHtml(MENTION)}»</p>`), []));
+  it('returns nothing for plain notes', () => assert.deepEqual(mentionedUserIds('<p>⏰ Påminnelse R-1 satt</p>'), []));
 });

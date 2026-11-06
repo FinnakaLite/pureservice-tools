@@ -21,10 +21,11 @@ const BOT: User = { id: 2695, firstName: 'Pureservice-tools-test', lastName: '',
 
 class FakePureService implements PureServiceApi {
   notes: Communication[] = [];
-  posted: { ticketId: number; html: string; id: number }[] = [];
+  posted: { ticketId: number; html: string; id: number; mentions: number[] }[] = [];
   users = new Map<number, User>([[FINN.id, FINN], [OLA.id, OLA], [BOT.id, BOT]]);
   nextId = 1000;
   failNextPost: ApiError | null = null;
+  rejectMentions = false;
   stripMarker = false;
   clock: () => Date = () => new Date();
 
@@ -43,11 +44,12 @@ class FakePureService implements PureServiceApi {
   async findBotNote(ticketId: number, marker: string) {
     return this.notes.find((n) => n.ticketId === ticketId && (n.text ?? '').includes(marker)) ?? null;
   }
-  async createInternalNote(ticketId: number, html: string) {
+  async createInternalNote(ticketId: number, html: string, mentions: number[] = []) {
+    if (this.rejectMentions && mentions.length) throw new ApiError('400 invalid mentions', 400, false);
     const stored = this.stripMarker ? html.replace(/<!--[\s\S]*?-->/g, '') : html;
     const c = this.add(stored, BOT, { ticketId });
     if (this.failNextPost) { const e = this.failNextPost; this.failNextPost = null; throw e; }
-    this.posted.push({ ticketId, html: stored, id: c.id });
+    this.posted.push({ ticketId, html: stored, id: c.id, mentions });
     return c;
   }
   async userEmail(u: User) { return u.id === FINN.id ? 'finn.mccann@smith.no' : null; }
@@ -106,9 +108,22 @@ describe('bot end-to-end', () => {
     assert.match(fired, /data-mention-user-id="2611"/);
     assert.match(fired, /href="mailto:finn\.mccann@smith\.no"/);
     assert.match(text(fired), /^🤖 🔔 @Finn McCann påminnelse R-1: «ring leverandør»/);
+    assert.deepEqual(t.api.posted[1]!.mentions, [FINN.id], 'creates a Mention record so the user is notified even if not assigned');
+    assert.deepEqual(t.api.posted[0]!.mentions, [], 'the confirmation tags nobody');
 
     t.advance(86400_000); await t.cycle();
     assert.equal(t.api.posted.length, 2, 'fires exactly once');
+  });
+
+  it('still posts the reminder if PureService rejects the mention records', async () => {
+    await t.cycle();
+    t.api.add('<p>!remindme 1h</p>');
+    await t.cycle();
+    t.api.rejectMentions = true;
+    t.advance(3600_000); await t.cycle();
+    assert.equal(t.api.posted.length, 2);
+    assert.match(t.api.posted[1]!.html, /data-mention-user-id="2611"/, 'the @-chip is still there');
+    assert.deepEqual(t.api.posted[1]!.mentions, []);
   });
 
   it('never reacts to its own notes, even though they quote commands', async () => {

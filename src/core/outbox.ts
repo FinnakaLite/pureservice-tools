@@ -10,7 +10,7 @@
 import type { Config } from '../config.ts';
 import { ApiError, CircuitOpenError } from '../pureservice/client.ts';
 import type { PureServiceApi } from '../pureservice/api.ts';
-import { htmlToLines } from './html.ts';
+import { htmlToLines, mentionedUserIds } from './html.ts';
 import type { Logger } from './log.ts';
 import type { OutboxRow, Store } from './store.ts';
 
@@ -63,13 +63,27 @@ export class Outbox {
     const mark = marker(row.id);
     this.store.setOutbox(row.id, { status: 'sending', bumpAttempts: true }, now);
     try {
-      const created = await this.api.createInternalNote(row.ticket_id, `${row.html}<!-- ${mark} -->`);
+      const html = `${row.html}<!-- ${mark} -->`;
+      const mentions = mentionedUserIds(row.html);
+      let created;
+      try {
+        created = await this.api.createInternalNote(row.ticket_id, html, mentions);
+      } catch (e) {
+        // A definite 4xx rejection (nothing was created) while sending mentions: post the
+        // note without Mention records rather than lose it. The @-chip still shows; only the
+        // mention notification is missing. Ambiguous failures never take this path.
+        if (!mentions.length || !(e instanceof ApiError) || e.ambiguous || e.status < 400 || e.status >= 500 || e.status === 429) throw e;
+        this.log.warn('PureService rejected the mention records — posting the note without them', {
+          outboxId: row.id, ticketId: row.ticket_id, status: e.status, error: e.message,
+        });
+        created = await this.api.createInternalNote(row.ticket_id, html);
+      }
       this.store.tx(() => {
         this.store.setOutbox(row.id, { status: 'sent', communicationId: created.id }, now);
         if (!this.store.getState('bot_user_id') && created.createdById) this.store.setState('bot_user_id', String(created.createdById));
         if (this.store.getState('marker_survives') === null) this.store.setState('marker_survives', String((created.text ?? '').includes(mark)));
       });
-      this.log.info('note posted', { outboxId: row.id, ticketId: row.ticket_id, communicationId: created.id, origin: row.origin });
+      this.log.info('note posted', { outboxId: row.id, ticketId: row.ticket_id, communicationId: created.id, origin: row.origin, mentions: mentions.length });
       return true;
     } catch (e) {
       if (e instanceof CircuitOpenError) {

@@ -39,7 +39,8 @@ export interface PureServiceApi {
   newestNoteId(): Promise<number | null>;
   notesAfter(afterId: number, limit: number): Promise<NotesPage>;
   findBotNote(ticketId: number, marker: string): Promise<Communication | null>;
-  createInternalNote(ticketId: number, html: string): Promise<Communication>;
+  /** mentionUserIds: users to notify. Each gets a Mention record, created in the same request as the note. */
+  createInternalNote(ticketId: number, html: string, mentionUserIds?: number[]): Promise<Communication>;
   userEmail(user: User): Promise<string | null>;
 }
 
@@ -77,11 +78,29 @@ export function createApi(client: PureServiceClient): PureServiceApi {
       return first<Communication>(body, 'communications')[0] ?? null;
     },
 
-    async createInternalNote(ticketId, html) {
+    async createInternalNote(ticketId, html, mentionUserIds = []) {
       // Hard-coded type/direction: the bot can never create a Message (which e-mails the end user).
-      const body = await client.post('/communication/', {
-        communications: [{ text: html, type: CommunicationType.Note, direction: Direction.None, links: { ticket: { id: ticketId } } }],
-      });
+      //
+      // Mentions: the @-markup in the text only renders the chip. PureService notifies a
+      // mentioned agent (regardless of who the ticket is assigned to) only when a Mention
+      // record exists for the note, which is what the agent UI creates. The records are
+      // side-loaded with JSON:API temporary ids, so the note and its mentions are created
+      // atomically in one request. Verified on smith.pureservice.com 2026-11-06: this
+      // produces a "notification-mention-other" notification.
+      const tmp = mentionUserIds.map((_, i) => `m${i + 1}`);
+      const links: Record<string, unknown> = { ticket: { id: ticketId } };
+      if (tmp.length) links.mentions = tmp.map((temporaryId) => ({ temporaryId, type: 'mention' }));
+      const payload: Record<string, unknown> = {
+        communications: [{ text: html, type: CommunicationType.Note, direction: Direction.None, links }],
+      };
+      if (tmp.length) {
+        payload.linked = {
+          mentions: mentionUserIds.map((userId, i) => ({
+            temporaryId: tmp[i], userId, ticketId, links: { user: { id: userId }, ticket: { id: ticketId } },
+          })),
+        };
+      }
+      const body = await client.post('/communication/', payload);
       const created = first<Communication>(body, 'communications')[0];
       if (!created) throw new Error('PureService accepted the note but returned no communication');
       return created;

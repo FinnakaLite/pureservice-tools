@@ -45,12 +45,31 @@ export interface MentionTarget {
   email: string | null;
 }
 
-/** Same markup the PureService editor produces; verified to trigger a notification. */
+/**
+ * Same markup the PureService editor produces. The markup alone only renders the
+ * @-chip: the *notification* comes from a separate Mention record, which the
+ * outbox creates for every user found by mentionedUserIds() (see api.ts).
+ */
 export function mentionHtml(u: MentionTarget): string {
   const name = `${u.firstName} ${u.lastName}`.trim();
   const href = u.email ? `mailto:${escapeHtml(u.email)}` : '#';
   return `<a class="x-ps-autocomplete-mention" href="${href}" data-mention="true" data-mention-user-id="${u.id}"` +
     ` data-mention-firstname="${escapeHtml(u.firstName)}" data-mention-lastname="${escapeHtml(u.lastName)}">@${escapeHtml(name)}</a>`;
+}
+
+export const MAX_MENTIONS_PER_NOTE = 10;
+
+/**
+ * User ids of the mention anchors in bot-generated HTML, deduplicated, in order.
+ * User-supplied text is always escaped (quotes become &quot;), so it can't fake one.
+ */
+export function mentionedUserIds(html: string): number[] {
+  const ids = new Set<number>();
+  for (const m of html.matchAll(/<a\b[^>]*\bclass="x-ps-autocomplete-mention"[^>]*\bdata-mention-user-id="(\d+)"/g)) {
+    ids.add(Number(m[1]));
+    if (ids.size >= MAX_MENTIONS_PER_NOTE) break;
+  }
+  return [...ids];
 }
 
 /** A command is "!name" at the very start of a line. Returns name (lowercased) + raw args. */
