@@ -1,0 +1,24 @@
+{
+  "name": "pureservice-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PureService bot: reacts to !commands in internal notes (first command: !remindme).",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "check": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "verify": "npm run check && npm test"
+  },
+  "dependencies": {
+    "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.3"
+  }
+}
